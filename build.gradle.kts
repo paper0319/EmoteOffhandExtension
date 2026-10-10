@@ -8,7 +8,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("org.geysermc.geyser:api:2.9.3-SNAPSHOT")
+    compileOnly("org.geysermc.geyser:api:2.11.3-SNAPSHOT")
+    compileOnly("org.geysermc.geyser:core:2.11.3-SNAPSHOT")
 }
 
 tasks {
@@ -25,6 +26,6 @@ tasks {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }

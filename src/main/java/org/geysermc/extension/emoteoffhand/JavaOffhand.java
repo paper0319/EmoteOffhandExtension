@@ -68,11 +68,14 @@ final class JavaOffhand {
             return;
         }
 
+        // Same face and click point the outline is using. Do not recast from the eyes:
+        // that misses the highlighted block and drops a wrong-sized model beside the camera.
+        Direction face = Direction.getUntrusted(packet, InventoryTransactionPacket::getBlockFace);
         float cursorX = fixCursorValue(packet.getClickPosition().getX());
         float cursorY = fixCursorValue(packet.getClickPosition().getY());
         float cursorZ = fixCursorValue(packet.getClickPosition().getZ());
-        Direction face = Direction.getUntrusted(packet, InventoryTransactionPacket::getBlockFace);
         Vector3i placePosition = BlockUtils.getBlockPosition(packet.getBlockPosition(), face);
+        session.getWorldCache().removePrediction(placePosition);
         int sequence = session.getWorldCache().nextPredictionSequence();
         session.getWorldCache().markPositionInSequence(placePosition);
         session.sendDownstreamGamePacket(new ServerboundUseItemOnPacket(
@@ -83,6 +86,11 @@ final class JavaOffhand {
                 false,
                 false,
                 sequence));
+
+        if (offhand.asItem() instanceof BlockItem blockItem) {
+            session.setLastBlockPlacePosition(placePosition);
+            session.setLastBlockPlaced(blockItem);
+        }
 
         if (hasUseAction(offhand) && !useOnConsumes(offhand, clicked)) {
             session.useItem(Hand.OFF_HAND);
@@ -100,7 +108,6 @@ final class JavaOffhand {
         if (!BedrockInventoryTransactionTranslator.canInteractWithBlock(session, eye, packet.getBlockPosition())) {
             return false;
         }
-
         Vector3i clicked = packet.getBlockPosition();
         float cursorX = fixCursorValue(packet.getClickPosition().getX());
         float cursorY = fixCursorValue(packet.getClickPosition().getY());
@@ -129,7 +136,7 @@ final class JavaOffhand {
         if (stack.has(DataComponentTypes.CONSUMABLE) || stack.has(DataComponentTypes.INSTRUMENT) || stack.has(DataComponentTypes.BUNDLE_CONTENTS)) {
             return true;
         }
-        String id = path(stack.asItem().javaIdentifier());
+        String id = stack.asItem().javaKey().value();
         return switch (id) {
             case "bow", "crossbow", "shield", "trident", "spyglass", "brush", "fishing_rod",
                     "carrot_on_a_stick", "warped_fungus_on_a_stick", "ender_pearl", "ender_eye",
@@ -150,7 +157,7 @@ final class JavaOffhand {
         if (item instanceof BlockItem || item instanceof BoatItem || item instanceof SpawnEggItem) {
             return true;
         }
-        String id = path(item.javaIdentifier());
+        String id = item.javaKey().value();
         String block = clicked.block().javaIdentifier().value();
         if (id.equals("bucket") || id.endsWith("_bucket")) {
             return bucketConsumes(id, block, clicked);
@@ -239,11 +246,6 @@ final class JavaOffhand {
         }
         boolean mayBuild = session.getGameMode() == GameMode.SURVIVAL || session.getGameMode() == GameMode.CREATIVE;
         return mayBuild && BlockRegistries.INTERACTIVE_MAY_BUILD.get().get(id);
-    }
-
-    private static String path(String identifier) {
-        int colon = identifier.indexOf(':');
-        return colon >= 0 ? identifier.substring(colon + 1) : identifier;
     }
 
     private static float fixCursorValue(float value) {

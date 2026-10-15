@@ -8,8 +8,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("org.geysermc.geyser:api:2.11.3-SNAPSHOT")
-    compileOnly("org.geysermc.geyser:core:2.11.3-SNAPSHOT")
+    compileOnly("org.geysermc.geyser:api:2.12.0-SNAPSHOT")
+    compileOnly("org.geysermc.geyser:core:2.12.0-SNAPSHOT")
 }
 
 tasks {

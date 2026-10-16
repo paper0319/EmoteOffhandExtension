@@ -45,6 +45,12 @@ final class JavaOffhand {
         if (offhand.isEmpty() || hasUseAction(mainHand)) {
             return;
         }
+        // A shield is raised by sneaking. Geyser already sends that for either hand.
+        // Right-click must not start blocking, and a shield in the main hand must not
+        // swallow the click that the offhand item still needs.
+        if (isShield(offhand)) {
+            return;
+        }
 
         if (packet.getActionType() == 1) {
             if (hasUseAction(offhand)) {
@@ -126,11 +132,11 @@ final class JavaOffhand {
     }
 
     /**
-     * Right-click actions that succeed without a block face: eating, drawing a bow, blocking, equipping.
-     * Java stops at the main hand when one of these starts.
+     * Right-click actions that succeed without a block face: eating, drawing a bow, throwing, equipping.
+     * Java stops at the main hand when one of these starts. Shields are raised by sneaking instead.
      */
     private static boolean hasUseAction(GeyserItemStack stack) {
-        if (stack.isEmpty()) {
+        if (stack.isEmpty() || isShield(stack)) {
             return false;
         }
         if (stack.has(DataComponentTypes.CONSUMABLE) || stack.has(DataComponentTypes.INSTRUMENT) || stack.has(DataComponentTypes.BUNDLE_CONTENTS)) {
@@ -138,7 +144,7 @@ final class JavaOffhand {
         }
         String id = stack.asItem().javaKey().value();
         return switch (id) {
-            case "bow", "crossbow", "shield", "trident", "spyglass", "brush", "fishing_rod",
+            case "bow", "crossbow", "trident", "spyglass", "brush", "fishing_rod",
                     "carrot_on_a_stick", "warped_fungus_on_a_stick", "ender_pearl", "ender_eye",
                     "snowball", "egg", "experience_bottle", "wind_charge", "firework_rocket",
                     "writable_book", "written_book", "knowledge_book", "elytra", "goat_horn" -> true;
@@ -232,6 +238,10 @@ final class JavaOffhand {
 
     private static boolean isSign(String block) {
         return block.endsWith("_sign");
+    }
+
+    private static boolean isShield(GeyserItemStack stack) {
+        return !stack.isEmpty() && "shield".equals(stack.asItem().javaKey().value());
     }
 
     private static boolean blockIntercepts(GeyserSession session, BlockState state) {

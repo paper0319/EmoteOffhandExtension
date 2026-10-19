@@ -3,6 +3,7 @@ package org.geysermc.extension.emoteoffhand;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.protocol.bedrock.data.definitions.ItemDefinition;
+import org.cloudburstmc.protocol.bedrock.data.entity.EntityFlag;
 import org.cloudburstmc.protocol.bedrock.data.inventory.ItemData;
 import org.cloudburstmc.protocol.bedrock.data.inventory.transaction.InventoryTransactionType;
 import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
@@ -45,9 +46,8 @@ final class JavaOffhand {
         if (offhand.isEmpty() || hasUseAction(mainHand)) {
             return;
         }
-        // A shield is raised by sneaking. Geyser already sends that for either hand.
-        // Right-click must not start blocking, and a shield in the main hand must not
-        // swallow the click that the offhand item still needs.
+        // Shift raises the shield. A right-click must not start blocking, and a shield
+        // in the main hand must not swallow the click the offhand item still needs.
         if (isShield(offhand)) {
             return;
         }
@@ -133,7 +133,7 @@ final class JavaOffhand {
 
     /**
      * Right-click actions that succeed without a block face: eating, drawing a bow, throwing, equipping.
-     * Java stops at the main hand when one of these starts. Shields are raised by sneaking instead.
+     * Java stops at the main hand when one of these starts. A shield is raised by shift, not by this click.
      */
     private static boolean hasUseAction(GeyserItemStack stack) {
         if (stack.isEmpty() || isShield(stack)) {
@@ -242,6 +242,53 @@ final class JavaOffhand {
 
     private static boolean isShield(GeyserItemStack stack) {
         return !stack.isEmpty() && "shield".equals(stack.asItem().javaKey().value());
+    }
+
+    /**
+     * The shield is up because the player is sneaking. A use or release packet must not drop it.
+     * Geyser's useItem releases a blocking shield before it uses the main hand.
+     */
+    static boolean shieldRaisedBySneak(GeyserSession session) {
+        if (!session.isSneaking() || !session.getPlayerEntity().getFlag(EntityFlag.BLOCKING)) {
+            return false;
+        }
+        return shieldInEitherHand(session);
+    }
+
+    /**
+     * Geyser skips the first sneak block while the arm is still swinging. Raise it on that tick.
+     */
+    static void raiseOnSneak(GeyserSession session) {
+        if (!session.isSneaking() || session.isHandsBusy() || session.getGameMode() == GameMode.SPECTATOR) {
+            return;
+        }
+        if (session.getPlayerEntity().isInsideScaffolding()) {
+            return;
+        }
+        if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
+            return;
+        }
+        GeyserItemStack mainHand = session.getPlayerInventory().getItemInHand();
+        GeyserItemStack offhand = session.getPlayerInventory().getOffhand();
+        if (!isShield(mainHand) && !isShield(offhand)) {
+            return;
+        }
+        if (session.attemptToBlock()) {
+            session.getPlayerEntity().updateBedrockMetadata();
+            return;
+        }
+        Hand hand = isShield(mainHand) ? Hand.MAIN_HAND : Hand.OFF_HAND;
+        GeyserItemStack stack = hand == Hand.OFF_HAND ? offhand : mainHand;
+        if (session.getWorldCache().hasCooldown(stack)) {
+            return;
+        }
+        session.useItem(hand);
+        session.getPlayerEntity().setFlag(EntityFlag.BLOCKING, true);
+        session.getPlayerEntity().updateBedrockMetadata();
+    }
+
+    private static boolean shieldInEitherHand(GeyserSession session) {
+        return isShield(session.getPlayerInventory().getItemInHand()) || isShield(session.getPlayerInventory().getOffhand());
     }
 
     private static boolean blockIntercepts(GeyserSession session, BlockState state) {

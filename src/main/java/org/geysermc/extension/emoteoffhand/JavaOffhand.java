@@ -25,11 +25,17 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
 
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
+
 /**
  * Decides when a Bedrock use-click should also reach the offhand.
  * Java tries the main hand first. Only a click that passes there continues to the offhand.
  */
 final class JavaOffhand {
+    private static final Set<GeyserSession> sneakHandled = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+
     private JavaOffhand() {
     }
 
@@ -252,6 +258,11 @@ final class JavaOffhand {
         if (!session.isSneaking() || !session.getPlayerEntity().getFlag(EntityFlag.BLOCKING)) {
             return false;
         }
+        // A bow or food in the main hand needs its own release, or USING_ITEM stays set
+        // and raiseOnSneak never raises the shield again.
+        if (hasUseAction(session.getPlayerInventory().getItemInHand())) {
+            return false;
+        }
         return shieldInEitherHand(session);
     }
 
@@ -259,7 +270,16 @@ final class JavaOffhand {
      * Geyser skips the first sneak block while the arm is still swinging. Raise it on that tick.
      */
     static void raiseOnSneak(GeyserSession session) {
-        if (!session.isSneaking() || session.isHandsBusy() || session.getGameMode() == GameMode.SPECTATOR) {
+        if (!session.isSneaking()) {
+            sneakHandled.remove(session);
+            return;
+        }
+        // Once per sneak. This runs on every input tick, and a server that refuses the shield
+        // would otherwise get a use-item packet 20 times a second for as long as shift is held.
+        if (!sneakHandled.add(session)) {
+            return;
+        }
+        if (session.isHandsBusy() || session.getGameMode() == GameMode.SPECTATOR) {
             return;
         }
         if (session.getPlayerEntity().isInsideScaffolding()) {

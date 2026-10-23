@@ -24,6 +24,11 @@ public final class OffhandTransactionTranslator extends BedrockInventoryTransact
         if (packet.getTransactionType() == InventoryTransactionType.ITEM_RELEASE && JavaOffhand.shieldRaisedBySneak(session)) {
             return;
         }
+        // Attacking is left-click too.
+        if (packet.getTransactionType() == InventoryTransactionType.ITEM_USE_ON_ENTITY && packet.getActionType() == 1
+                && JavaOffhand.shieldRaisedBySneak(session)) {
+            return;
+        }
         boolean keepShield = JavaOffhand.shieldRaisedBySneak(session);
         if (keepShield) {
             session.getPlayerEntity().setFlag(EntityFlag.USING_ITEM, true);

@@ -1,5 +1,7 @@
 package org.geysermc.extension.emoteoffhand;
 
+import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
+import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 import org.geysermc.geyser.session.GeyserSession;
 import org.geysermc.geyser.translator.protocol.PacketTranslator;
@@ -18,6 +20,12 @@ public final class OffhandInputTranslator extends PacketTranslator<PlayerAuthInp
 
     @Override
     public void translate(GeyserSession session, PlayerAuthInputPacket packet) {
+        // Java ignores left-click while a shield is up, and Geyser would drop the shield on a swing.
+        if (JavaOffhand.shieldRaisedBySneak(session)) {
+            packet.getInputData().remove(PlayerAuthInputData.MISSED_SWING);
+            packet.getPlayerActions().removeIf(a -> a.getAction() == PlayerActionType.START_BREAK
+                    || a.getAction() == PlayerActionType.CONTINUE_BREAK);
+        }
         delegate.translate(session, packet);
         JavaOffhand.raiseOnSneak(session);
     }

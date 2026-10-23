@@ -1,5 +1,6 @@
 package org.geysermc.extension.emoteoffhand;
 
+import org.cloudburstmc.protocol.bedrock.packet.AnimatePacket;
 import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 import org.geysermc.event.subscribe.Subscribe;
@@ -8,6 +9,7 @@ import org.geysermc.geyser.api.event.bedrock.ClientEmoteEvent;
 import org.geysermc.geyser.api.event.lifecycle.GeyserPostInitializeEvent;
 import org.geysermc.geyser.api.extension.Extension;
 import org.geysermc.geyser.registry.Registries;
+import org.geysermc.geyser.translator.protocol.bedrock.BedrockAnimateTranslator;
 import org.geysermc.geyser.translator.protocol.bedrock.BedrockInventoryTransactionTranslator;
 import org.geysermc.geyser.translator.protocol.bedrock.entity.player.input.BedrockPlayerAuthInputTranslator;
 
@@ -31,6 +33,7 @@ public class EmoteOffhand implements Extension {
                 ? translator : null;
         Registries.BEDROCK_PACKET_TRANSLATORS.register(InventoryTransactionPacket.class, new OffhandTransactionTranslator(delegate));
         installSneakShield();
+        installSwingFilter();
         this.logger().info("Offhand use now follows Java Edition hand order.");
     }
 
@@ -44,6 +47,13 @@ public class EmoteOffhand implements Extension {
             return;
         }
         Registries.BEDROCK_PACKET_TRANSLATORS.register(PlayerAuthInputPacket.class, new OffhandInputTranslator(delegate));
+    }
+
+    private void installSwingFilter() {
+        Object current = Registries.BEDROCK_PACKET_TRANSLATORS.get(AnimatePacket.class);
+        if (current instanceof BedrockAnimateTranslator delegate) {
+            Registries.BEDROCK_PACKET_TRANSLATORS.register(AnimatePacket.class, new OffhandAnimateTranslator(delegate));
+        }
     }
 
     @Subscribe

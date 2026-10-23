@@ -26,7 +26,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponen
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
 
 import java.util.Collections;
-import java.util.Set;
+import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
@@ -34,7 +34,8 @@ import java.util.WeakHashMap;
  * Java tries the main hand first. Only a click that passes there continues to the offhand.
  */
 final class JavaOffhand {
-    private static final Set<GeyserSession> sneakHandled = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+    private static final Map<GeyserSession, Long> lastRaiseTick = Collections.synchronizedMap(new WeakHashMap<>());
+    private static final int RAISE_RETRY_TICKS = 10;
 
     private JavaOffhand() {
     }
@@ -271,12 +272,7 @@ final class JavaOffhand {
      */
     static void raiseOnSneak(GeyserSession session) {
         if (!session.isSneaking()) {
-            sneakHandled.remove(session);
-            return;
-        }
-        // Once per sneak. This runs on every input tick, and a server that refuses the shield
-        // would otherwise get a use-item packet 20 times a second for as long as shift is held.
-        if (!sneakHandled.add(session)) {
+            lastRaiseTick.remove(session);
             return;
         }
         if (session.isHandsBusy() || session.getGameMode() == GameMode.SPECTATOR) {
@@ -293,6 +289,14 @@ final class JavaOffhand {
         if (!isShield(mainHand) && !isShield(offhand)) {
             return;
         }
+        // Retry while shift stays held (the swing or a leftover use may have blocked the first try),
+        // but not every input tick: a server that refuses the shield would get 20 use packets a second.
+        long now = session.getTicks();
+        Long last = lastRaiseTick.get(session);
+        if (last != null && now - last < RAISE_RETRY_TICKS) {
+            return;
+        }
+        lastRaiseTick.put(session, now);
         if (session.attemptToBlock()) {
             session.getPlayerEntity().updateBedrockMetadata();
             return;

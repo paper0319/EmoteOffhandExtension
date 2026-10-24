@@ -1,5 +1,7 @@
 package org.geysermc.extension.emoteoffhand;
 
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
+import org.geysermc.geyser.session.cache.WorldCache;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.protocol.bedrock.data.definitions.ItemDefinition;
@@ -271,6 +273,17 @@ final class JavaOffhand {
      * Geyser skips the first sneak block while the arm is still swinging. Raise it on that tick.
      */
     static void raiseOnSneak(GeyserSession session) {
+        // An axe disables the shield. The server ends the block but our optimistic flags stay
+        // set, which would block every later raise. Drop them even if shift was released meanwhile.
+        if (shieldOnCooldown(session) && !hasUseAction(session.getPlayerInventory().getItemInHand())) {
+            if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
+                session.getPlayerEntity().setFlag(EntityFlag.BLOCKING, false);
+                session.getPlayerEntity().setFlag(EntityFlag.USING_ITEM, false);
+                session.getPlayerEntity().updateBedrockMetadata();
+            }
+            lastRaiseTick.remove(session);
+            return;
+        }
         if (!session.isSneaking()) {
             lastRaiseTick.remove(session);
             return;
@@ -284,16 +297,6 @@ final class JavaOffhand {
         GeyserItemStack mainHand = session.getPlayerInventory().getItemInHand();
         GeyserItemStack offhand = session.getPlayerInventory().getOffhand();
         if (!isShield(mainHand) && !isShield(offhand)) {
-            return;
-        }
-        // An axe disables the shield. The server ends the block but our optimistic flags stay
-        // set, which would block every later raise. Drop them so the raise works after the cooldown.
-        if (shieldOnCooldown(session) && !hasUseAction(mainHand)) {
-            if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
-                session.getPlayerEntity().setFlag(EntityFlag.BLOCKING, false);
-                session.getPlayerEntity().setFlag(EntityFlag.USING_ITEM, false);
-                session.getPlayerEntity().updateBedrockMetadata();
-            }
             return;
         }
         if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
@@ -319,6 +322,35 @@ final class JavaOffhand {
         session.useItem(hand);
         session.getPlayerEntity().setFlag(EntityFlag.BLOCKING, true);
         session.getPlayerEntity().updateBedrockMetadata();
+    }
+
+    private static final java.lang.reflect.Field ACTIVE_COOLDOWNS = cooldownField();
+
+    private static java.lang.reflect.Field cooldownField() {
+        try {
+            java.lang.reflect.Field f = WorldCache.class.getDeclaredField("activeCooldowns");
+            f.setAccessible(true);
+            return f;
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Geyser never removes a finished cooldown (WorldCache.tick is not called), so after an axe
+     * disables the shield, hasCooldown stays true forever. Drop the entries whose time has passed.
+     */
+    static void purgeExpiredCooldowns(GeyserSession session) {
+        if (ACTIVE_COOLDOWNS == null) {
+            return;
+        }
+        try {
+            Object2IntMap<?> cooldowns = (Object2IntMap<?>) ACTIVE_COOLDOWNS.get(session.getWorldCache());
+            int now = session.getTicks();
+            cooldowns.object2IntEntrySet().removeIf(e -> e.getIntValue() <= now);
+        } catch (ReflectiveOperationException ignored) {
+            // ponytail: falls back to Geyser's own (stuck) cooldown check
+        }
     }
 
     private static boolean shieldOnCooldown(GeyserSession session) {

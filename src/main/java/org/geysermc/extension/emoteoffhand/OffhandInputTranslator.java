@@ -20,6 +20,7 @@ public final class OffhandInputTranslator extends PacketTranslator<PlayerAuthInp
 
     @Override
     public void translate(GeyserSession session, PlayerAuthInputPacket packet) {
+        JavaOffhand.purgeExpiredCooldowns(session);
         // Java ignores left-click while a shield is up, and Geyser would drop the shield on a swing.
         if (JavaOffhand.shieldRaisedBySneak(session)) {
             packet.getInputData().remove(PlayerAuthInputData.MISSED_SWING);

@@ -264,7 +264,7 @@ final class JavaOffhand {
         if (hasUseAction(session.getPlayerInventory().getItemInHand())) {
             return false;
         }
-        return shieldInEitherHand(session);
+        return shieldInEitherHand(session) && !shieldOnCooldown(session);
     }
 
     /**
@@ -281,12 +281,22 @@ final class JavaOffhand {
         if (session.getPlayerEntity().isInsideScaffolding()) {
             return;
         }
-        if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
-            return;
-        }
         GeyserItemStack mainHand = session.getPlayerInventory().getItemInHand();
         GeyserItemStack offhand = session.getPlayerInventory().getOffhand();
         if (!isShield(mainHand) && !isShield(offhand)) {
+            return;
+        }
+        // An axe disables the shield. The server ends the block but our optimistic flags stay
+        // set, which would block every later raise. Drop them so the raise works after the cooldown.
+        if (shieldOnCooldown(session) && !hasUseAction(mainHand)) {
+            if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
+                session.getPlayerEntity().setFlag(EntityFlag.BLOCKING, false);
+                session.getPlayerEntity().setFlag(EntityFlag.USING_ITEM, false);
+                session.getPlayerEntity().updateBedrockMetadata();
+            }
+            return;
+        }
+        if (session.getPlayerEntity().getFlag(EntityFlag.BLOCKING) || session.getPlayerEntity().getFlag(EntityFlag.USING_ITEM)) {
             return;
         }
         // Retry while shift stays held (the swing or a leftover use may have blocked the first try),
@@ -309,6 +319,12 @@ final class JavaOffhand {
         session.useItem(hand);
         session.getPlayerEntity().setFlag(EntityFlag.BLOCKING, true);
         session.getPlayerEntity().updateBedrockMetadata();
+    }
+
+    private static boolean shieldOnCooldown(GeyserSession session) {
+        GeyserItemStack mainHand = session.getPlayerInventory().getItemInHand();
+        GeyserItemStack stack = isShield(mainHand) ? mainHand : session.getPlayerInventory().getOffhand();
+        return isShield(stack) && session.getWorldCache().hasCooldown(stack);
     }
 
     private static boolean shieldInEitherHand(GeyserSession session) {
